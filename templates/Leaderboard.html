@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - Snake Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background: url('/static/images/background.png') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Press Start 2P', cursive;
+        }
+        table {
+            width: 60%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: #FFFFFF;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid #CCCCCC;
+        }
+        th {
+            background-color: #007BFF;
+            color: white;
+            font-size: 20px;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f9f9f9;  /* Hover effect for rows */
+        }
+        .pagination, .menu-button-container {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .page-button, .menu-button {
+            padding: 10px 15px;
+            margin: 0 10px;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 5px;
+        }
+        .page-button:hover, .menu-button:hover {
+            background-color: #45a049;
+        }
+        .page-button[disabled], .menu-button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody id="leaderboardBody">
+        </tbody>
+    </table>
+    <div class="pagination">
+        <button id="prevButton" class="page-button">Prev</button>
+        <button id="nextButton" class="page-button">Next</button>
+    </div>
+    <div class="menu-button-container">
+        <button id="menuButton" class="menu-button">Back to Menu</button>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const rowsPerPage = 5;
+
+        function fetchLeaderboard(page) {
+            fetch(`/api/leaderboard?page=${page}&limit=${rowsPerPage}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateTable(data);
+                    document.getElementById('prevButton').disabled = currentPage === 1;
+                    document.getElementById('nextButton').disabled = data.length < rowsPerPage;
+                })
+                .catch(error => console.error('Error loading leaderboard:', error));
+        }
+
+        function updateTable(data) {
+            const tableBody = document.getElementById('leaderboardBody');
+            tableBody.innerHTML = '';
+            data.forEach(entry => {
+                const row = tableBody.insertRow();
+                row.insertCell(0).textContent = entry.name;
+                row.insertCell(1).textContent = entry.score;
+            });
+        }
+
+        document.getElementById('prevButton').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchLeaderboard(currentPage);
+            }
+        });
+
+        document.getElementById('nextButton').addEventListener('click', () => {
+            currentPage++;
+            fetchLeaderboard(currentPage);
+        });
+
+        document.getElementById('menuButton').addEventListener('click', () => {
+            window.location.href = '/';
+        });
+
+        fetchLeaderboard(currentPage);
+    </script>
+</body>
+</html>
