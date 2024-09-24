@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.js" integrity="UPDATED_INTEGRITY_HERE" crossorigin="anonymous" defer></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-image: url('/static/images/background.png');
+            font-family: 'Press Start 2P', cursive;
+            background-size: cover;
+            background-position: center;
+        }
+        #gameCanvas {
+            background-color: rgba(255, 255, 255, 0.8);
+            border: 5px solid #4CAF50;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+        #startMessage {
+            text-align: center;
+            font-size: 20px;
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            color: white;
+            text-shadow: 2px 2px 4px #000;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <audio id="backgroundMusic" src="/static/sounds/background.ogg" loop></audio>
+    <audio id="eatingSound" src="/static/sounds/eating.mp3"></audio>
+    <audio id="collisionSound" src="/static/sounds/death.ogg"></audio>
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    <div id="startMessage" style="opacity: 1;">
+        Press SPACE to start the game!
+    </div>
+
+    <script>
+        function fetchAndDisplayLeaderboard() {
+    fetch('/api/leaderboard')
+    .then(response => response.json())
+    .then(data => {
+        updateLeaderboardDisplay(data);
+    })
+    .catch(error => console.error('Error fetching leaderboard:', error));
+}
+
+function updateLeaderboardDisplay(leaderboard) {
+    const leaderboardElement = document.getElementById('leaderboardBody'); // Ensure this ID matches your HTML
+    leaderboardElement.innerHTML = ''; // Clear existing entries
+    leaderboard.forEach(entry => {
+        const row = leaderboardElement.insertRow();
+        row.insertCell(0).textContent = entry.name;
+        row.insertCell(1).textContent = entry.score;
+    });
+}
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const socket = io();
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            let gameStarted = false;
+            let gamePaused = false;
+
+            const gridWidth = 40;
+            const gridHeight = 40;
+
+            const backgroundMusic = document.getElementById('backgroundMusic');
+            const eatingSound = document.getElementById('eatingSound');
+            const collisionSound = document.getElementById('collisionSound');
+
+            function resizeCanvas() {
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                const maxCellSizeWidth = Math.floor(viewportWidth / gridWidth);
+                const maxCellSizeHeight = Math.floor(viewportHeight / gridHeight);
+                const cellSize = Math.min(maxCellSizeWidth, maxCellSizeHeight);
+
+                canvas.width = cellSize * gridWidth;
+                canvas.height = cellSize * gridHeight;
+
+                canvas.style.marginTop = `${Math.max((viewportHeight - canvas.height) / 2, 0)}px`;
+            }
+
+            function drawSnakePart(snakePart) {
+                const cellSize = canvas.width / gridWidth;
+                let x = snakePart[0] * cellSize;
+                let y = snakePart[1] * cellSize;
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x, y, cellSize, cellSize);
+                ctx.strokeRect(x, y, cellSize, cellSize);
+            }
+
+            function drawSnake(snake) {
+                snake.forEach(drawSnakePart);
+            }
+
+            function drawBait(bait) {
+                const cellSize = canvas.width / gridWidth;
+                let x = bait[0] * cellSize;
+                let y = bait[1] * cellSize;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(x, y, cellSize, cellSize);
+                ctx.strokeRect(x, y, cellSize, cellSize);
+            }
+
+            function drawScore(score) {
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'black';
+                ctx.fillText("Score: " + score, 10, 30);
+            }
+
+
+            document.addEventListener('keydown', event => {
+                if (event.code === "Space" && !gameStarted && !gamePaused) {
+                    socket.emit('start_game', { gridWidth, gridHeight });
+                    gameStarted = true;
+                    document.getElementById('startMessage').style.opacity = '0';
+                }
+                else if (event.code === "Space" && gameStarted && gamePaused) {
+                    socket.emit('resume_game');
+                    gamePaused = false;
+                    document.getElementById('startMessage').style.opacity = '0';
+                }
+                if (event.code === "KeyP" && gameStarted && !gamePaused) {
+                    socket.emit('pause_game');
+                    gamePaused = true;
+                    document.getElementById('startMessage').innerText = 'Game Paused. Press SPACE to resume.';
+                    document.getElementById('startMessage').style.opacity = '1';
+                }
+                const directionMap = {
+                    ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT'
+                };
+                if (event.key in directionMap) {
+                    socket.emit('change_direction', { direction: directionMap[event.key] });
+                }
+            });
+
+            socket.on('collision', (data) => {
+                collisionSound.play();
+            });
+
+            socket.on('bait_eaten', () => {
+                eatingSound.play();
+            });
+
+            socket.on('game_state', data => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawSnake(data.snake);
+                drawBait(data.bait);
+                drawScore(data.score);
+                backgroundMusic.play();
+                gameSpeed = 100 / data.speed;
+                if (data.snake[0][0] === data.bait[0] && data.snake[0][1] === data.bait[1]) {
+                    eatingSound.play();
+                }
+            });
+
+            socket.on('game_over', function(data) {
+    backgroundMusic.pause();
+    collisionSound.play();
+    alert('Game Over! Your score: ' + data.score);
+    setTimeout(function() {
+        window.location.href = '/';
+    }, 2000); // Delay to allow the player to read the alert
+});
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            function updateGame() {
+                socket.emit('update_game', {name: localStorage.getItem('playerName') || 'Guest'});
+                setTimeout(updateGame, gameSpeed);
+            }
+            let gameSpeed = 100;
+            updateGame();
+        });
+    </script>
+</body>
+</html>
